@@ -20,7 +20,7 @@
 - [🚀 Quick Start Guide](#-quick-start-guide)
 - [⚙️ Configuration & Environment](#️-configuration--environment)
 - [🔌 REST & Streaming API Reference](#-rest--streaming-api-reference)
-- [🖥️ 3-Panel IDE Web Dashboard](#️-3-panel-ide-web-dashboard)
+- [🖥️ Interactive Web Interface](#️-interactive-web-interface)
 - [🧪 Testing & Verification](#-testing--verification)
 - [📂 Project Directory Structure](#-project-directory-structure)
 
@@ -28,10 +28,10 @@
 
 ## 🌟 Core Features
 
-### 1. 3-Panel IDE Web Dashboard
-- **Left Panel (File Explorer)**: Hierarchical tree view with language badges, line counts, byte sizes, and real-time substring filtering.
-- **Center Panel (Conversational RAG Chat)**: Real-time token streaming via Server-Sent Events (SSE), architectural prompt suggestion chips, and interactive citation badges.
-- **Right Panel (Code Inspector)**: In-depth code viewer with line numbers, copy actions, and **auto-scrolling citation highlights** when clicking reference badges in chat.
+### 1. Interactive Web Interface
+- **File Explorer**: Hierarchical tree view with language badges, line counts, byte sizes, and real-time substring filtering.
+- **Conversational RAG Chat**: Real-time token streaming via Server-Sent Events (SSE), architectural prompt suggestion chips, and interactive citation badges.
+- **Code Inspector**: In-depth code viewer with line numbers, copy actions, and **auto-scrolling citation highlights** when clicking reference badges in chat.
 
 ### 2. Syntax & Scope-Aware AST Chunking
 - Parses Python source files using Python's native `ast` module to split code along function, class, and method boundaries.
@@ -63,7 +63,7 @@
 
 ```mermaid
 graph TD
-    subgraph Frontend [Frontend: 3-Panel IDE]
+    subgraph Frontend [Frontend: React Web Client]
         FE["File Explorer<br/>(Hierarchical Tree & Filter)"]
         CP["Chat & Reasoning Panel<br/>(Real-Time SSE Streaming)"]
         CI["Code Inspector<br/>(Syntax View & Citation Jump)"]
@@ -229,7 +229,7 @@ The FastAPI backend exposes clean REST endpoints and SSE streaming channels:
 
 ---
 
-## 🖥️ 3-Panel IDE Web Dashboard
+## 🖥️ Interactive Web Interface
 
 ```
 ┌──────────────────────────┬──────────────────────────────────────┬──────────────────────────┐
@@ -300,7 +300,7 @@ Repomind/
 │   ├── index_codebase.py         # Offline code indexing pipeline
 │   ├── test_agent_trace.py       # Verification and trace test suite
 │   └── tools/                    # Tool definitions (AST, RAG, Onboarding, Code)
-├── frontend/                     # React + Vite 3-Panel IDE Web Dashboard
+├── frontend/                     # React + Vite Web Client
 │   ├── src/
 │   │   ├── App.jsx               # Main state orchestrator
 │   │   ├── index.css             # Vanilla CSS design system (IDE dark theme)

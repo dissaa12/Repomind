@@ -59,49 +59,51 @@ Open your browser to: **`http://localhost:5173/`**
 ### System Flow Diagram
 
 ```mermaid
-graph TB
-    subgraph UI["🖥️ Frontend (React + Vite 3-Panel IDE)"]
-        FE["📁 File Explorer<br/>(Hierarchical Tree & Filter)"]
-        CP["💬 Chat & Reasoning Panel<br/>(Real-Time SSE Streaming)"]
-        CI["🔍 Code Inspector<br/>(Syntax View & Citation Jump)"]
+graph TD
+    subgraph Frontend [Frontend: 3-Panel IDE]
+        FE["File Explorer<br/>(Hierarchical Tree & Filter)"]
+        CP["Chat & Reasoning Panel<br/>(Real-Time SSE Streaming)"]
+        CI["Code Inspector<br/>(Syntax View & Citation Jump)"]
     end
 
-    subgraph API["⚡ Backend Gateway (FastAPI)"]
-        Endpoints["REST & SSE Endpoints<br/>(/api/query/stream, /api/repos, /api/files)"]
+    subgraph Backend [Backend API & Orchestration]
+        Endpoints["FastAPI Endpoints<br/>(/api/query/stream, /api/repos, /api/files)"]
         Pipeline["Orchestrator Pipeline<br/>(pipeline.py)"]
     end
 
-    subgraph INGEST["📥 Ingestion & Parsing Subsystem"]
-        Crawler["Smart Traversal<br/>(Local Directory / Git Cloner)"]
-        Chunker["AST & Scope-Aware Chunker<br/>(Python AST, JS/TS Regex, Headers)"]
+    subgraph Ingestion [Ingestion & Parsing Subsystem]
+        Crawler["Smart Traversal<br/>(Local Directory & Git Cloner)"]
+        Chunker["AST & Scope Chunker<br/>(Python AST, JS/TS Regex, Headers)"]
     end
 
-    subgraph RETRIEVAL["🔎 Hybrid Retrieval Engine"]
+    subgraph Retrieval [Hybrid Retrieval Engine]
         Chroma["Dense Vectors<br/>(ChromaDB 384-dim)"]
         BM25["Sparse Lexical Index<br/>(BM25 Symbol Matching)"]
-        Reranker["Hybrid Fusion<br/>(Symbol Match Boosting & Citation Mapping)"]
+        Reranker["Hybrid Fusion Reranker<br/>(Symbol Match Boosting & Citation Mapping)"]
     end
 
-    subgraph INTELLIGENCE["🤖 Intelligence & Agentic Layer"]
+    subgraph Intelligence [Agentic & LLM Layer]
         ADK["Google ADK Multi-Agent Team<br/>(Coordinator + 4 Workers + MCP)"]
         Providers["Multi-Provider LLM Gateway<br/>(Gemini, OpenAI, Groq, Ollama, Mock AI)"]
     end
 
-    subgraph STORAGE["💾 Persistence Layer"]
-        SQLite[("SQLite DB<br/>repos, files, conversations")]
-        VectorStore[("ChromaDB Storage<br/>code embeddings")]
+    subgraph Storage [Persistence Layer]
+        SQLite["SQLite DB<br/>(repos, files, conversations)"]
+        VectorStore["ChromaDB Storage<br/>(code embeddings)"]
     end
 
-    %% Interactions
-    UI <-->|HTTP REST / SSE Stream| Endpoints
+    Frontend -->|HTTP REST / SSE Stream| Endpoints
+    Endpoints -->|Streamed Tokens & Badges| Frontend
     Endpoints --> Pipeline
-    Pipeline --> Crawler --> Chunker
-    Chunker --> Chroma & BM25
-    Chroma & BM25 --> Reranker
-
-    Endpoints <--> Reranker
-    Endpoints <--> INTELLIGENCE
-    Reranker -->|Retrieved Chunks & Line Citations| INTELLIGENCE
+    Pipeline --> Crawler
+    Crawler --> Chunker
+    Chunker --> Chroma
+    Chunker --> BM25
+    Chroma --> Reranker
+    BM25 --> Reranker
+    Endpoints --> Reranker
+    Endpoints --> Intelligence
+    Reranker -->|Retrieved Chunks & Citations| Intelligence
     Pipeline --> SQLite
     Chroma --> VectorStore
 ```

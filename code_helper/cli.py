@@ -3,6 +3,7 @@ code_helper/cli.py - Interactive Terminal CLI for Multi-Agent Code Helper
 Allows developers to query the 5-agent team directly in the terminal without opening a browser.
 """
 
+import io
 import os
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 
 # Ensure UTF-8 output on Windows terminal
 os.environ["PYTHONUTF8"] = "1"
-if sys.platform == "win32":
+if sys.platform == "win32" and isinstance(sys.stdout, io.TextIOWrapper):
     sys.stdout.reconfigure(encoding="utf-8")
 
 # Load environment

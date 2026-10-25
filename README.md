@@ -1,220 +1,463 @@
-# Multi-Agent Code Helper
+# Repomind — Multi-Agent Code Helper
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![Google ADK](https://img.shields.io/badge/Google_ADK-Multi--Agent-4285F4?style=flat&logo=google&logoColor=white)](https://github.com/google/adk)
+[![Google ADK](https://img.shields.io/badge/Google_ADK-2.12.0-4285F4?style=flat&logo=google&logoColor=white)](https://github.com/google/adk)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Filesystem_Server-7952B3?style=flat)](https://modelcontextprotocol.io/)
-[![Pinecone](https://img.shields.io/badge/Pinecone-Vector_Database-000000?style=flat)](https://www.pinecone.io/)
+[![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-000000?style=flat)](https://www.pinecone.io/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Local_Fallback-FF6F61?style=flat)](https://www.trychroma.com/)
 
-> An autonomous multi-agent developer assistance system powered by **Google ADK** (Agent Development Kit) and the **Model Context Protocol (MCP)**. It answers architectural, structural, and implementation questions about the `Naive_RAG` code project through a team of 5 specialized AI agents: 1 coordinator boss and 4 specialized workers.
+> **Repomind** is an autonomous multi-agent code intelligence and developer onboarding system built with **Google Agent Development Kit (ADK)** and the **Model Context Protocol (MCP)**. It indexes, navigates, and explains software repositories without hallucinations through a team of five specialized agents: a central supervisor (`coordinator`) and four targeted worker agents (`code_searcher`, `code_explainer`, `architecture_mapper`, and `onboarding_guide`).
 
 ---
 
 ## 📑 Table of Contents
 
-- [What This Helper Does](#what-this-helper-does)
-- [System Architecture Diagram](#system-architecture-diagram)
-- [Table of Agents](#table-of-agents)
-- [Table of Tools](#table-of-tools)
-- [Chunk Size Strategy & Vector Database](#chunk-size-strategy--vector-database)
-- [Model Context Protocol (MCP) Integration](#model-context-protocol-mcp-integration)
-- [Exact Commands to Run](#exact-commands-to-run)
-- [3 Sample Questions with Verified Answers](#3-sample-questions-with-verified-answers)
-- [One Problem Hit and How It Was Fixed](#one-problem-hit-and-how-it-was-fixed)
-- [Environment Configuration](#environment-configuration)
-- [Final Checklist Verification](#final-checklist-verification)
+- [1. Problem Statement & Motivation](#1-problem-statement--motivation)
+- [2. Key Features](#2-key-features)
+- [3. Multi-Agent Architecture](#3-multi-agent-architecture)
+- [4. System Architecture Diagram](#4-system-architecture-diagram)
+- [5. Detailed RAG Pipeline](#5-detailed-rag-pipeline)
+- [6. Technologies Used](#6-technologies-used)
+- [7. Project Folder Structure](#7-project-folder-structure)
+- [8. Prerequisites](#8-prerequisites)
+- [9. Installation & Setup (Windows PowerShell)](#9-installation--setup-windows-powershell)
+- [10. Environment Variable Configuration](#10-environment-variable-configuration)
+- [11. Exact Commands to Run](#11-exact-commands-to-run)
+- [12. Example Questions for Each Agent](#12-example-questions-for-each-agent)
+- [13. End-to-End Query Lifecycle](#13-end-to-end-query-lifecycle)
+- [14. Testing & Troubleshooting](#14-testing--troubleshooting)
+- [15. Limitations & Future Improvements](#15-limitations--future-improvements)
 
 ---
 
-## What This Helper Does
+## 1. Problem Statement & Motivation
 
-The **Multi-Agent Code Helper** provides automated developer onboarding, code location discovery, whole-file explanation, and structural dependency mapping for the `Naive_RAG` codebase:
+When onboarding onto an unfamiliar codebase, software engineers spend hours tracing function definitions, deciphering cross-module import chains, and determining which terminal commands initialize dependencies. 
 
-1. **Autonomous Delegation**: A central coordinator evaluates user queries and delegates tasks to specialized workers without answering directly.
-2. **Deterministic Code Search**: Locates functions, classes, and logic using vector embeddings.
-3. **Safe File Inspection**: Reads and reviews full files through a sandboxed Filesystem MCP server.
-4. **AST-Driven Architecture Mapping**: Analyzes imports, class hierarchies, and symbol references using plain Python AST parsing with **zero AI guessing**.
-5. **Guided Onboarding**: Explains project architecture, the 8-stage pipeline, and run commands for new developers.
+Standard generative AI assistants struggle in this environment because:
+1. **Hallucinations**: Generative LLMs guess file names, non-existent arguments, and phantom imports when answering from memory.
+2. **Context Window Saturation**: Passing an entire repository into a prompt wastes tokens, exceeds context limits, and degrades reasoning precision.
+3. **Lack of Specialization**: A single prompt cannot effectively act as an import parser, a semantic search engine, and an architectural tutor at the same time.
+
+**Repomind solves this** by decomposing codebase intelligence into a strict multi-agent hierarchy:
+- Semantic questions (*"Where is similarity calculated?"*) are routed to vector-based code retrieval.
+- File deep-dives (*"Explain indexer.py"*) read verified disk contents via a sandboxed Model Context Protocol server.
+- Dependency questions (*"Which files import config.py?"*) are answered with **zero AI guesswork** using Python's deterministic Abstract Syntax Tree (`ast`).
+- New engineers receive structured setup guidance and pipeline diagrams directly from grounded project facts.
 
 ---
 
-## System Architecture Diagram
+## 2. Key Features
+
+- **Strict Multi-Agent Routing**: A central coordinator acts as a pure dispatcher, classifying user intent and delegating to specialized workers while strictly forbidden from answering directly.
+- **Deterministic AST Cartography**: Uses Python's native `ast` library to trace import dependencies and extract classes and functions without generative model guessing.
+- **Dual Vector Storage (Pinecone + ChromaDB)**: Indexes source code into a Pinecone serverless vector index, with an automatic, zero-configuration local ChromaDB fallback.
+- **Sandboxed File Access via MCP**: The Code Explainer inspects source files using the standardized `@modelcontextprotocol/server-filesystem` server, ensuring safe directory-restricted read access.
+- **Flexible LLM Provider Support**: Runs via `LiteLLM` across **NVIDIA NIM** (`meta/llama-3.2-11b-vision-instruct`), **Google Gemini** (`gemini-2.5-flash`), or **OpenAI** (`gpt-4o-mini`).
+- **Dual Execution Interfaces**: Fully compatible with both the Google ADK Web UI (`adk web`) and the interactive command-line interface (`adk run code_helper` or `python code_helper/cli.py`).
+
+---
+
+## 3. Multi-Agent Architecture
+
+The multi-agent system is implemented in [`code_helper/agent.py`](code_helper/agent.py) with role prompts defined in [`code_helper/prompts.py`](code_helper/prompts.py). It consists of one coordinator boss and four specialized worker agents:
+
+```
+                          ┌───────────────────────────┐
+                          │    coordinator (Boss)     │
+                          │   "Never answers itself"  │
+                          └─────────────┬─────────────┘
+                                        │
+         ┌──────────────────┬───────────┴───────────┬──────────────────┐
+         ▼                  ▼                       ▼                  ▼
+┌─────────────────┐ ┌─────────────────┐   ┌─────────────────┐ ┌─────────────────┐
+│  code_searcher  │ │  code_explainer │   │  architecture_  │ │   onboarding_   │
+│                 │ │                 │   │     mapper      │ │      guide      │
+│ "Where is it?"  │ │ "What does this │   │ "How are files  │ │"Where do I start│
+│                 │ │    file do?"    │   │   connected?"   │ │  & how to run?" │
+└────────┬────────┘ └────────┬────────┘   └────────┬────────┘ └────────┬────────┘
+         │                   │                     │                   │
+         ▼                   ▼                     ▼                   ▼
+    [rag_search]      [Filesystem MCP]      [analyze_imports]    [get_project_
+                      [file_summary]        [list_symbols]        overview]
+                      [read_lines]          [find_references]    [get_execution_
+                                                                  guide]
+```
+
+### Table of Agents
+
+| Agent Identifier | Human Role | Operational Directive & Instruction Trigger | Assigned Toolset |
+| :--- | :--- | :--- | :--- |
+| **`coordinator`** | **The Boss / Dispatcher** | Pure dispatcher. Evaluates user input, classifies intent, and delegates to the single best worker. *Never answers technical questions directly.* | Sub-agents: `code_searcher`, `code_explainer`, `architecture_mapper`, `onboarding_guide` |
+| **`code_searcher`** | **Code Search Specialist** | Answers *"Where is X implemented?"*. Queries vector storage and answers strictly from retrieved code passages. If nothing matches, states *"I could not find that in the indexed code"*. | `rag_search` |
+| **`code_explainer`** | **Code Reviewer & Deep-Dive** | Answers *"Explain what this file does"*. Inspects disk files to explain architecture, class roles, and line spans with technical clarity. | Filesystem MCP (`read_file`, `list_directory`), `get_file_summary`, `read_specific_lines` |
+| **`architecture_mapper`**| **Structural Cartographer** | Answers *"Which files import config.py?"* or *"List all functions in indexer.py"*. Uses plain Python AST with **zero AI guessing**. | `analyze_imports`, `list_functions_and_classes`, `find_symbol_references` |
+| **`onboarding_guide`** | **New Developer Mentor** | Answers *"Where do I start?"* and *"How do I run the project?"*. Explains the pipeline architecture and provides verified execution commands. | `get_project_overview`, `get_execution_guide` |
+
+---
+
+## 4. System Architecture Diagram
+
+The flowchart below illustrates the actual execution paths in the codebase:
 
 ```mermaid
 graph TD
-    User["Developer Query"] --> Boss["1. Coordinator (The Boss)<br/>Pure Dispatcher / Zero Direct Answers"]
-
-    Boss -->|"Where is X implemented?"| Worker1["2. Code Searcher<br/>RAG Vector Search"]
-    Boss -->|"Explain file / lines"| Worker2["3. Code Explainer<br/>Filesystem MCP Server"]
-    Boss -->|"Imports & connections"| Worker3["4. Architecture Mapper<br/>Deterministic Python AST"]
-    Boss -->|"Where to start / Setup"| Worker4["5. Onboarding Guide<br/>Project Architecture & Setup"]
-
-    subgraph Tools [Assigned Tools & Protocols]
-        Tool1["rag_search()<br/>(Pinecone / ChromaDB)"]
-        Tool2["Filesystem MCP Server<br/>(read_file, list_directory)"]
-        Tool2B["Code Inspection Tools<br/>(get_file_summary, read_specific_lines)"]
-        Tool3["Plain Python AST Tools (No AI)<br/>(analyze_imports, list_functions_and_classes, find_symbol_references)"]
-        Tool4["Static Knowledge Tools<br/>(get_project_overview, get_execution_guide)"]
+    subgraph Ingestion ["Offline Indexing Pipeline (index_codebase.py)"]
+        SrcFiles["Source Files<br/>(Naive_RAG/*.py)"] --> DocIngest["Document Ingestion<br/>(read_python_files)"]
+        DocIngest --> Chunking["Sliding-Window Chunking<br/>(50 lines / 10 overlap)"]
+        Chunking --> EmbedCheck{"PINECONE_API_KEY<br/>available?"}
+        EmbedCheck -->|Yes| PineconeUpsert["Pinecone Serverless Index<br/>(code-helper, dim=2048)"]
+        EmbedCheck -->|No / Fallback| ChromaUpsert["Local ChromaDB Storage<br/>(data_store/chroma/)"]
     end
 
-    Worker1 --> Tool1
-    Worker2 --> Tool2
-    Worker2 --> Tool2B
-    Worker3 --> Tool3
-    Worker4 --> Tool4
+    subgraph Runtime ["Online Multi-Agent Runtime (Google ADK)"]
+        UserQuery["Developer Query"] --> Coordinator["Coordinator Agent<br/>(Intent Classification)"]
+        
+        Coordinator -->|"Where is X?"| Searcher["Worker 1: code_searcher"]
+        Coordinator -->|"Explain file / lines"| Explainer["Worker 2: code_explainer"]
+        Coordinator -->|"Imports / Call graph"| Mapper["Worker 3: architecture_mapper"]
+        Coordinator -->|"Where to start / Setup"| Guide["Worker 4: onboarding_guide"]
 
-    subgraph Storage [Databases & Target Codebase]
-        VectorDB["Pinecone Serverless Index /<br/>Local ChromaDB Fallback"]
-        SourceFiles["Naive_RAG Source Files<br/>(config, indexer, vector_store, query_pipeline, main)"]
+        Searcher --> ToolRAG["rag_search()"]
+        ToolRAG --> PineconeUpsert
+        ToolRAG -.->|Fallback| ChromaUpsert
+
+        Explainer --> ToolMCP["Filesystem MCP Server<br/>(@modelcontextprotocol/server-filesystem)"]
+        Explainer --> ToolCode["Native Inspection Tools<br/>(read_specific_lines, get_file_summary)"]
+        ToolMCP --> SrcFiles
+        ToolCode --> SrcFiles
+
+        Mapper --> ToolAST["Deterministic AST Tools (No AI)<br/>(ast.parse: analyze_imports, list_symbols)"]
+        ToolAST --> SrcFiles
+
+        Guide --> ToolGuide["Static Project Knowledge<br/>(get_project_overview, get_execution_guide)"]
+
+        ToolRAG --> Answer["Grounded Answer with Citations<br/>[filename.py:start-end]"]
+        ToolMCP --> Answer
+        ToolCode --> Answer
+        ToolAST --> Answer
+        ToolGuide --> Answer
     end
-
-    Tool1 --> VectorDB
-    Tool2 --> SourceFiles
-    Tool3 --> SourceFiles
 ```
 
 ---
 
-## Table of Agents
+## 5. Detailed RAG Pipeline
 
-| Agent Name | Role / What it does | Instruction / Routing Trigger | Tools Assigned |
-| :--- | :--- | :--- | :--- |
-| **`coordinator`** | **The Boss**: Evaluates incoming queries and routes each to the right worker. Never answers technical questions itself. | *"Never answer yourself. Pick the best worker for the incoming question."* | Sub-agents: `code_searcher`, `code_explainer`, `architecture_mapper`, `onboarding_guide` |
-| **`code_searcher`** | **Search Specialist**: Finds where something is in the code using vector RAG search. | *"Use your search tool. Answer only from what it returns. If it finds nothing useful, say 'I could not find that'."* | `rag_search` |
-| **`code_explainer`** | **Code Deep-Dive**: Reads whole files and explains classes, methods, and logic via MCP. | *"Use your file inspection tools to read and examine source code files. Explain what the file does clearly."* | Filesystem MCP Server (`read_file`, `list_directory`), `get_file_summary`, `read_specific_lines` |
-| **`architecture_mapper`**| **Structural Cartographer**: Maps file connections, imports, and symbol references using plain Python AST. | *"Use your plain Python AST tools to examine import statements, list classes and functions with zero guesswork."* | `analyze_imports`, `list_functions_and_classes`, `find_symbol_references` *(Plain Python, No AI)* |
-| **`onboarding_guide`** | **New Developer Mentor**: Explains what the project does, the 8-stage pipeline, and exact setup commands. | *"Use your onboarding tools to guide developers on what the project does and the exact commands to run."* | `get_project_overview`, `get_execution_guide` |
+The RAG pipeline is implemented in [`code_helper/index_codebase.py`](code_helper/index_codebase.py) (indexing) and [`code_helper/tools/rag_tools.py`](code_helper/tools/rag_tools.py) (retrieval):
 
----
+### Step 1: Source File Discovery
+- Scans the target project folder ([`Naive_RAG`](Naive_RAG)) for all `.py` files.
+- Reads file content with UTF-8 encoding (falling back to replacement characters for cross-platform compatibility).
 
-## Table of Tools
+### Step 2: Syntax- & Scope-Aware Chunking Strategy
+- **Window Size**: `50 lines` (~150–250 tokens per chunk).
+- **Window Overlap**: `10 lines` (~30–50 tokens).
+- **Step Size**: `40 lines` (`CHUNK_SIZE_LINES - CHUNK_OVERLAP_LINES`).
 
-| Tool Name | Assigned Worker | Uses AI? | Description |
-| :--- | :--- | :--- | :--- |
-| **`rag_search`** | `code_searcher` | Yes (Vectors) | Embeds user queries and searches Pinecone (or local ChromaDB) for closest code passages. |
-| **`analyze_imports`** | `architecture_mapper` | **No (Plain Python AST)** | Parses the AST of all project files to return which files import a given module (e.g. `config.py`). |
-| **`list_functions_and_classes`** | `architecture_mapper` | **No (Plain Python AST)** | Extracts function and class definitions, line spans, arguments, and docstrings from a file. |
-| **`find_symbol_references`** | `architecture_mapper` | **No (Plain Python AST)** | Scans all `.py` files to find exact lines where a specific function or variable is referenced. |
-| **`get_file_summary`** | `code_explainer` | No (Plain Python) | Returns line counts, dependency counts, and defined classes/functions before full file reading. |
-| **`read_specific_lines`** | `code_explainer` | No (Plain Python) | Reads a numbered line range from a file (e.g., lines 55 to 111). |
-| **`get_project_overview`** | `onboarding_guide` | No (Static Knowledge) | Summarizes the purpose and responsibilities of the 5 core project files. |
-| **`get_execution_guide`** | `onboarding_guide` | No (Static Knowledge) | Provides step-by-step terminal commands to create virtual environments, run indexing, and run `--compare`. |
-| **Filesystem MCP** (`read_file`, `list_directory`) | `code_explainer` | No (MCP Protocol) | Connects via `@modelcontextprotocol/server-filesystem` to safely read project files in a sandboxed directory. |
+**Why This Strategy Was Chosen:**
+1. **Semantic Function Preservation**: Python functions across the target codebase average between 20 and 45 lines. A 50-line window allows most functions to reside entirely within a single chunk.
+2. **Boundary Protection**: If a function signature begins on line 45, a hard 50-line cut would sever the definition from its body. The 10-line overlap guarantees the complete header and docstring are preserved in the subsequent chunk.
+3. **Retrieval Precision**: 50 lines provides high cosine similarity matching for targeted questions (*"Where is cosine similarity calculated?"*) without diluting relevance across unrelated classes.
 
----
+### Step 3: Embedding Generation & Vector Storage
+- **Primary Database (Pinecone)**:
+  - If `PINECONE_API_KEY` is present, connects to Pinecone and initializes a serverless index named `code-helper` (`dimension=2048`, `metric=cosine`, `cloud=aws`, `region=us-east-1`).
+  - Upserts chunk text, start line, end line, and file path as metadata.
+- **Local Fallback (ChromaDB)**:
+  - If no Pinecone key is configured or if the network is unavailable, the pipeline falls back to `backend.retrieval.vector_store` using local ChromaDB persistent storage (`data_store/chroma/`).
 
-## Chunk Size Strategy & Vector Database
+### Step 4: Retrieval and Ranking
+- When `rag_search(query)` executes:
+  1. Queries the Pinecone `code-helper` index for the top-4 closest vector matches.
+  2. If Pinecone is unconfigured or encounters an error, falls back to ChromaDB dense vector search fused with BM25 keyword matching via [`backend/retrieval/hybrid_retriever.py`](backend/retrieval/hybrid_retriever.py).
+  3. Applies a **1.3× score multiplier boost** to code chunks where query keywords match actual function or class symbol names.
 
-- **Chunk Size**: `50 lines` (~150–250 tokens)
-- **Overlap**: `10 lines` (~30–50 tokens)
-
-### Why This Was Chosen:
-1. **Preserves Semantic Scope**: Typical functions in this project are 20 to 45 lines long. Sizing chunks at 50 lines allows each function to be indexed within a single, cohesive chunk.
-2. **Boundary Protection**: If a function header or docstring begins on line 45, a hard 50-line cut would sever the signature from its implementation. The 10-line overlap guarantees the full signature and docstring are preserved in the next chunk.
-3. **Retrieval Precision**: 50 lines produces high cosine similarity for specific queries (*"Where is chunk_document?"*), whereas larger windows (>150 lines) dilute relevance across unrelated functions.
-
-### Vector Database
-- **Primary**: **Pinecone** serverless vector index (`code-helper`) storing 2048-dimensional embeddings with cosine similarity metric.
-- **Local Fallback**: Automatic, zero-configuration local **ChromaDB** fallback if Pinecone credentials are not configured.
+### Step 5: Context Construction & Answer Generation
+- The retrieved code snippet is formatted with its file path and line numbers: `[filename.py:start_line-end_line]`.
+- The worker agent grounds its explanation exclusively on this context and outputs the mandatory citation format.
 
 ---
 
-## Model Context Protocol (MCP) Integration
+## 6. Technologies Used
 
-- **MCP Server**: `@modelcontextprotocol/server-filesystem`
-- **Execution Command**: `npx -y @modelcontextprotocol/server-filesystem <path_to_code>`
-
-### Why This MCP Server Was Chosen:
-1. **Standardized Protocol**: Implements the Model Context Protocol (MCP) standard, enabling any MCP-compliant agent to safely inspect project files.
-2. **Directory Sandboxing**: Restricts the agent's filesystem access strictly to the target project directory (`Naive_RAG`), preventing accidental reading of parent directories or system files.
-3. **Built-in Tool Exposure**: Automatically exposes clean, schema-validated tools (`read_file`, `list_directory`) directly to the `code_explainer` agent.
+| Technology | Purpose | Actual Usage in this Codebase |
+| :--- | :--- | :--- |
+| **Google ADK (`google-adk`)** | Agent Framework | Orchestrates the `LlmAgent` team, sub-agent delegation hierarchy, and session management via `adk web` and `adk run`. |
+| **LiteLLM (`litellm`)** | Multi-Provider Gateway | Standardizes model calls in `code_helper/agent.py` to NVIDIA NIM, Google Gemini, or OpenAI. |
+| **Model Context Protocol (MCP)** | File System Toolset | Connects `code_explainer` to `@modelcontextprotocol/server-filesystem` via stdio for directory-sandboxed file reading. |
+| **Pinecone (`pinecone`)** | Primary Vector Database | Cloud serverless vector index (`code-helper`) storing code embeddings with cosine distance. |
+| **ChromaDB (`chromadb`)** | Local Vector Database | Zero-configuration local vector storage fallback persisted under `data_store/chroma/`. |
+| **Python `ast` Module** | Static Code Analysis | Deterministic, zero-AI parsing of import trees, class definitions, function signatures, and docstrings in `ast_tools.py`. |
+| **Rank-BM25 (`rank-bm25`)** | Lexical Code Search | Keyword search with identifier tokenization used in the local hybrid retrieval fallback engine. |
+| **FastAPI (`fastapi`)** | REST & SSE Backend | Serves the web endpoints, repo catalog, and token-streaming APIs in `backend/main.py`. |
+| **python-dotenv (`python-dotenv`)** | Environment Loading | Loads API keys and configurations from `.env` without hardcoding credentials in code. |
 
 ---
 
-## Exact Commands to Run
+## 7. Project Folder Structure
+
+```
+Repomind/
+├── .agents/
+│   └── mcp_config.json               # Filesystem MCP server definition
+├── backend/
+│   ├── config.py                     # Central configuration & storage directory paths
+│   ├── main.py                       # FastAPI REST API & SSE streaming server
+│   ├── pipeline.py                   # Repository ingestion & indexing orchestrator
+│   ├── requirements.txt              # Core backend dependencies
+│   ├── db/
+│   │   └── database.py               # SQLite storage for repositories & conversations
+│   ├── ingestion/
+│   │   ├── file_crawler.py           # Directory crawler with .gitignore & noise filtering
+│   │   └── git_cloner.py             # Git repository cloner
+│   ├── parser/
+│   │   └── code_chunker.py           # Scope-aware code chunker using Python AST
+│   ├── retrieval/
+│   │   ├── bm25_index.py             # Rank-BM25 lexical index with symbol tokenizer
+│   │   ├── hybrid_retriever.py       # Weighted dense + sparse score fusion
+│   │   └── vector_store.py           # ChromaDB persistent store with local embeddings
+│   └── llm/
+│       └── providers.py              # Multi-provider streaming adapter (Gemini, OpenAI, Mock)
+├── code_helper/                      # Google ADK Multi-Agent Team
+│   ├── agent.py                      # Multi-agent team definitions & MCP integration
+│   ├── cli.py                        # Interactive terminal CLI chat interface
+│   ├── index_codebase.py             # Offline codebase indexing into Pinecone / ChromaDB
+│   ├── prompts.py                    # Dedicated agent system prompts & routing rules
+│   ├── test_agent_trace.py           # Verification script for sample query workflows
+│   └── tools/
+│       ├── ast_tools.py              # Plain Python AST parsing (Zero AI guessing)
+│       ├── code_tools.py             # Line-range extraction & file summarization
+│       ├── onboarding_tools.py       # Architecture overview & developer execution guide
+│       └── rag_tools.py              # Vector retrieval tool (Pinecone + ChromaDB fallback)
+├── data_store/                       # Persistent SQLite DB & ChromaDB collections
+├── Naive_RAG/                        # Target code project analyzed by the Multi-Agent team
+├── pyrightconfig.json                # Language server configuration
+├── run_repomind.bat                  # Windows batch launcher
+└── run_repomind.ps1                  # Windows PowerShell launcher
+```
+
+---
+
+## 8. Prerequisites
+
+- **Operating System**: Windows 10/11, macOS, or Linux (Windows PowerShell instructions provided below).
+- **Python**: Version **3.10** or **3.11** (tested on Python 3.11).
+- **Node.js & npm**: Node.js **18+** (required for the Filesystem MCP server via `npx`).
+- **Git**: Installed and available in your system `PATH`.
+
+---
+
+## 9. Installation & Setup (Windows PowerShell)
+
+Open PowerShell in the project directory:
 
 ```powershell
-# 1. Activate the Python virtual environment
+# 1. Clone the repository (if not already local)
+git clone https://github.com/dissaa12/Repomind.git
+cd Repomind
+
+# 2. Activate the pre-configured virtual environment
 .\backend\.venv\Scripts\Activate.ps1
 
-# 2. Run codebase indexing (indexes Naive_RAG into Pinecone with local ChromaDB fallback)
+# (Optional: If creating a fresh virtual environment from scratch)
+# python -m venv backend\.venv
+# .\backend\.venv\Scripts\Activate.ps1
+# python -m pip install --upgrade pip
+# python -m pip install -r backend\requirements.txt
+# python -m pip install google-adk pinecone
+```
+
+---
+
+## 10. Environment Variable Configuration
+
+Create a `.env` file in the root of the repository:
+
+```env
+# =============================================================================
+# Repomind Environment Configuration
+# =============================================================================
+
+# --- LLM Provider Credentials (Provide at least one) ---
+# Option A: NVIDIA NIM (Primary model in ADK)
+NVIDIA_API_KEY=nvapi-your-nvidia-nim-api-key
+NVIDIA_CHAT_MODEL=meta/llama-3.2-11b-vision-instruct
+
+# Option B: Google Gemini (Seamless fallback in ADK)
+GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
+
+# Option C: OpenAI (Alternative fallback)
+OPENAI_API_KEY=sk-your-openai-api-key
+
+# --- Vector Database Credentials (Optional - defaults to local ChromaDB) ---
+PINECONE_API_KEY=your-pinecone-api-key
+PINECONE_INDEX_NAME=code-helper
+PINECONE_CLOUD=aws
+PINECONE_REGION=us-east-1
+
+# --- Target Codebase Path ---
+TARGET_PROJECT_DIR=Naive_RAG
+```
+
+---
+
+## 11. Exact Commands to Run
+
+Make sure your virtual environment is active (`.\backend\.venv\Scripts\Activate.ps1`) before executing:
+
+### Step 1: Run Codebase Indexing
+Reads `Naive_RAG`, splits files into 50-line chunks, and upserts them into Pinecone (or local ChromaDB):
+```powershell
 python code_helper/index_codebase.py
+```
 
-# 3. Interactive Web Interface via Google ADK Web
+### Step 2: Launch the Google ADK Web UI
+Launches the Google ADK browser-based multi-agent interface:
+```powershell
 adk web --port 8000
+```
+Open your browser to: **[http://localhost:8000](http://localhost:8000)**. Select the **`coordinator`** agent from the left dropdown.
 
-# 4. Interactive Terminal Chat via Google ADK CLI
+### Step 3: Run Interactive Terminal Chat (CLI)
+Interact with the multi-agent team directly inside your PowerShell console:
+```powershell
 adk run code_helper
+```
+*(Or run the standalone terminal assistant: `python code_helper/cli.py`)*
 
-# 5. Run the Verification Trace Test directly
+### Step 4: Run the Verification Trace Suite
+Executes the automated trace test validating intent routing across all three core workflows:
+```powershell
 python code_helper/test_agent_trace.py
 ```
 
 ---
 
-## 3 Sample Questions with Verified Answers
+## 12. Example Questions for Each Agent
 
-### Sample 1: "Where is the search done?"
-- **Answered By**: **`code_searcher`** (Worker 1)
-- **Tool Used**: `rag_search("search")`
-- **Verified Output**:
-  > *Found relevant matches in `query_pipeline.py:48-96 (retrieve_top_k)` and `vector_store.py:120-165 (query_vector)`. Stage 6 retrieval embeds the user query and performs cosine similarity search against the vector database.*
+### Questions for `code_searcher` (Locational & Conceptual Discovery)
+- *"Where is the vector search implemented?"*
+- *"Where is chunk_document defined?"*
+- *"Find the function that computes cosine similarity."*
+- *"Where are the embeddings generated in the pipeline?"*
 
-### Sample 2: "Which files import config.py?"
-- **Answered By**: **`architecture_mapper`** (Worker 3)
-- **Tool Used**: `analyze_imports("config")`
-- **Verified Output**:
-  > *The module 'config' is imported by:*
-  > - `indexer.py`
-  > - `main.py`
-  > - `query_pipeline.py`
-  > - `vector_store.py`
+### Questions for `code_explainer` (File & Algorithmic Walkthroughs)
+- *"Explain what indexer.py does."*
+- *"Walk me through the query_pipeline.py logic."*
+- *"Read lines 40 to 80 of vector_store.py and explain the error handling."*
+- *"What classes and methods are defined in config.py?"*
 
-### Sample 3: "I am new. Where do I start?"
-- **Answered By**: **`onboarding_guide`** (Worker 4)
-- **Tool Used**: `get_project_overview()` and `get_execution_guide()`
-- **Verified Output**:
-  > *Welcome! This project is an educational 8-stage Naive RAG pipeline studying `astratech_employee_handbook.txt` across 5 core files: `config.py` (settings), `indexer.py` (chunking & embeddings), `vector_store.py` (Pinecone storage), `query_pipeline.py` (retrieval & generation), and `main.py` (demo runner).*  
-  > *To start, run `python main.py` in your terminal to see the live demonstration comparing Raw LLM vs. Naive RAG.*
+### Questions for `architecture_mapper` (Dependencies & Symbol References)
+- *"Which files import config.py?"*
+- *"List all functions and classes in query_pipeline.py."*
+- *"Show me all references to RAGConfig across the codebase."*
+- *"Which files call retrieve_top_k?"*
 
----
-
-## One Problem Hit and How It Was Fixed
-
-- **Problem Hit**: On Windows PowerShell, running the offline indexing script initially threw a `UnicodeEncodeError: 'charmap' codec can't encode character '\u2713'` when printing status checkmarks (`✓`) because the default Windows console code page (cp1252) does not support unicode glyphs.
-- **How It Was Fixed**:
-  1. Replaced raw unicode glyphs with ASCII status tags (`[OK]`, `[!]`, `[*]`), guaranteeing cross-platform compatibility across Windows, Linux, and macOS without relying on terminal codepage overrides.
-  2. Set `PYTHONUTF8=1` in the runner environment to ensure UTF-8 encoding across all file operations.
+### Questions for `onboarding_guide` (Project Overview & Setup)
+- *"I am new to this codebase. Where do I start?"*
+- *"What are the 5 core files and what does each one do?"*
+- *"How do I run and test the Naive RAG pipeline?"*
+- *"What terminal command runs the side-by-side comparison?"*
 
 ---
 
-## Environment Configuration
+## 13. End-to-End Query Lifecycle
 
-Create a `.env` file in the project root:
+Here is how a query moves through the system:
 
-```env
-# --- LLM Provider API Keys (Supports NVIDIA NIM or Gemini) ---
-NVIDIA_API_KEY=your_nvidia_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
+1. **User Submission**: The developer submits a question to the system:  
+   *"Which files import config.py?"*
+2. **Supervisor Triage**: The `coordinator` agent evaluates the prompt. Its system instructions mandate zero direct answers and strict intent classification:
+   - Search query $\rightarrow$ `code_searcher`
+   - File explanation $\rightarrow$ `code_explainer`
+   - Import/Dependency mapping $\rightarrow$ `architecture_mapper`
+   - Onboarding/Getting started $\rightarrow$ `onboarding_guide`
+3. **Delegation**: The `coordinator` delegates the query to `architecture_mapper`.
+4. **Tool Execution**: `architecture_mapper` invokes the plain Python tool `analyze_imports("config")`.
+5. **Static Parsing**: The tool parses the Abstract Syntax Trees (`ast.parse`) of all `.py` files in `Naive_RAG`, inspecting `ast.Import` and `ast.ImportFrom` nodes.
+6. **Deterministic Result**: The tool returns:
+   ```
+   The module 'config' is imported by:
+   - indexer.py
+   - main.py
+   - query_pipeline.py
+   - vector_store.py
+   ```
+7. **Synthesis**: The `architecture_mapper` agent presents the verified result to the developer with exact file citations and zero hallucinations.
 
-# --- Pinecone Vector Database (Optional - falls back to local ChromaDB) ---
-PINECONE_API_KEY=your_pinecone_api_key_here
-PINECONE_INDEX_NAME=code-helper
-PINECONE_CLOUD=aws
-PINECONE_REGION=us-east-1
+---
+
+## 14. Testing & Troubleshooting
+
+### Running the Trace Test
+Run the automated verification script:
+```powershell
+python code_helper/test_agent_trace.py
+```
+**Expected Output:**
+```
+======================================================================
+  MULTI-AGENT CODE HELPER: VERIFICATION TRACE
+======================================================================
+
+[QUESTION 1]: "Where is the search done?"
+  -> Routed to: [code_searcher]
+  -> Tool Executed: rag_search("search")
+  -> Agent Output:
+     Found relevant matches in query_pipeline.py:48-96 and vector_store.py:120-165.
+
+[QUESTION 2]: "Which files import config.py?"
+  -> Routed to: [architecture_mapper]
+  -> Tool Executed: analyze_imports("config")
+  -> Agent Output:
+     The module 'config' is imported by: indexer.py, main.py, query_pipeline.py, vector_store.py.
+
+[QUESTION 3]: "I am new. Where do I start?"
+  -> Routed to: [onboarding_guide]
+  -> Tool Executed: get_project_overview() & get_execution_guide()
+  -> Agent Output (Excerpt):
+     This project is an end-to-end, educational Naive RAG pipeline...
+
+======================================================================
+  ALL 3 AGENT WORKFLOWS VERIFIED SUCCESSFULLY!
+======================================================================
 ```
 
+### Common Issues & Solutions
+
+1. **Error: `No such option '--8000'`**:
+   - Cause: Typing `--8000` instead of `--port 8000`.
+   - Fix: Run `adk web --port 8000`.
+
+2. **Error: `Cannot find module google.adk.agents`**:
+   - Cause: Running under the global Windows Python interpreter instead of the project virtual environment.
+   - Fix: Activate the virtual environment first (`.\backend\.venv\Scripts\Activate.ps1`) or select `backend\.venv\Scripts\python.exe` as the interpreter in your editor.
+
+3. **UnicodeEncodeError (`charmap codec can't encode character`)**:
+   - Cause: Default Windows console codepage (cp1252) failing on unicode glyphs.
+   - Fix: The codebase includes automatic `PYTHONUTF8=1` enforcement and uses ASCII tags (`[OK]`, `[!]`, `[*]`) to guarantee compatibility.
+
+4. **MCP Connection Timeout**:
+   - Cause: First-time invocation of `npx -y @modelcontextprotocol/server-filesystem` downloading the package over a slow network.
+   - Fix: Run `npx -y @modelcontextprotocol/server-filesystem --help` once in your terminal to pre-cache the package.
+
 ---
 
-## Final Checklist Verification
+## 15. Limitations & Future Improvements
 
-- [x] **1 Boss that only routes**: `coordinator` delegates to sub-agents and never answers technical questions directly.
-- [x] **4 Workers with clear descriptions**: `code_searcher`, `code_explainer`, `architecture_mapper`, and `onboarding_guide`.
-- [x] **Own RAG, all 5 steps**: Ingestion, AST chunking, embeddings, vector database, and retrieval implemented in `index_codebase.py` and `rag_tools.py`.
-- [x] **Chunking explained in README**: 50 lines with 10 overlap, with semantic rationale.
-- [x] **Runs with `adk run code_helper` or `adk web`**: Fully verified with Google ADK CLI and Web UI.
-- [x] **Pinecone as vector database**: Serverless Pinecone integration with automatic local ChromaDB fallback.
-- [x] **5 or more tools, at least 1 with no AI**: 7 custom tools total, with 3 plain Python AST tools using no AI.
-- [x] **Filesystem MCP on Code Explainer**: Integrates `@modelcontextprotocol/server-filesystem` via `McpToolset`.
-- [x] **Keys in `.env`, not in code**: Environment variables loaded via `python-dotenv`.
-- [x] **3 sample questions and 1 problem + fix documented**: Verified responses and Windows codepage fix recorded.
+### Current Limitations
+- **Language Scope**: AST dependency analysis is currently specialized for Python (`.py`) files; JavaScript and TypeScript files are analyzed via regex heuristics.
+- **Single-Turn Delegation**: The coordinator currently executes single-hop delegation to a worker; it does not chain sequential multi-agent debates (e.g., searching first, then auto-triggering the explainer).
+- **Static Knowledge Tools**: Onboarding guides summarize the project structure using curated knowledge bases rather than generating live pipeline diagrams dynamically.
+
+### Future Improvements
+- **Tree-Sitter Polyglot AST**: Upgrading AST parsing to Tree-Sitter to provide deterministic, zero-AI symbol extraction across C++, Go, Java, Rust, and TypeScript.
+- **Dynamic Multi-Hop Workflow**: Allowing the coordinator to orchestrate multi-step execution graphs (e.g., `code_searcher` identifies candidate files $\rightarrow$ passes line spans to `code_explainer` $\rightarrow$ passes module names to `architecture_mapper`).
+- **Automated PR Diff Analysis**: Enabling the agent team to review incoming Git diffs and automatically map which downstream modules are affected by modified functions.
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**.

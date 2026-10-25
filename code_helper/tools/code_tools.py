@@ -61,8 +61,8 @@ def read_specific_lines(file_name: str, start_line: int, end_line: int) -> str:
         with open(target_file, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
 
-        start = max(1, int(start_line))
-        end = min(len(lines), int(end_line))
+        start = max(1, start_line)
+        end = min(len(lines), end_line)
 
         if start > end:
             return f"Invalid line range: {start}-{end} (file has {len(lines)} lines)."

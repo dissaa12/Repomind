@@ -21,7 +21,7 @@
    - **Symbol Match Boosting**: Dynamically elevates chunks when user queries mention specific code symbols.
 
 4. **Multi-Provider LLM Engine**:
-   - Supports **Google Gemini** (`gemini-2.5-flash`), **OpenAI** (`gpt-4o-mini`), **Groq** (`llama-3.3-70b`), and **Local Ollama** (`llama3.2`).
+   - Supports **Google Gemini** (`gemini-3.8-flash`), **OpenAI** (`gpt-4o-mini`), **Groq** (`llama-3.3-70b`), and **Local Ollama** (`llama3.2`).
    - Includes an **offline grounded Mock AI mode** that works immediately without requiring any API keys.
 
 5. **Multi-Source Ingestion**:

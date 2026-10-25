@@ -111,7 +111,7 @@ export default function SettingsModal({ isOpen, onClose, currentSettings, onSett
                 className="form-input"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g. gemini-2.5-flash, gpt-4o-mini, llama-3.3-70b-versatile"
+                placeholder="e.g. gemini-2.0-flash, gemini-1.5-flash, gpt-4o-mini, llama-3.3-70b-versatile"
               />
             </div>
 

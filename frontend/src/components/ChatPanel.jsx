@@ -9,7 +9,8 @@ import {
   Cpu,
   HelpCircle,
   FileSearch,
-  ExternalLink
+  ExternalLink,
+  Trash2,
 } from 'lucide-react';
 
 const SUGGESTED_PROMPTS = [
@@ -27,6 +28,7 @@ export default function ChatPanel({
   isStreaming,
   onSendMessage,
   onJumpToCitation,
+  onClearChat,
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
@@ -39,7 +41,15 @@ export default function ChatPanel({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
-    onSendMessage(input.trim());
+    const text = input.trim();
+    if (text.toLowerCase() === '/clear' || text.toLowerCase() === 'clear') {
+      setInput('');
+      if (onClearChat) {
+        onClearChat();
+      }
+      return;
+    }
+    onSendMessage(text);
     setInput('');
   };
 
@@ -57,12 +67,49 @@ export default function ChatPanel({
           <Bot size={15} color="var(--accent-cyan)" />
           <span>Codebase RAG Assistant</span>
         </div>
-        {isStreaming && (
-          <span style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-cyan)', display: 'inline-block', animation: 'pulse 1s infinite' }} />
-            Streaming response...
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isStreaming && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--accent-cyan)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-cyan)', display: 'inline-block', animation: 'pulse 1s infinite' }} />
+              Streaming response...
+            </span>
+          )}
+          {hasMessages && !isStreaming && onClearChat && (
+            <button
+              type="button"
+              className="btn-clear-chat"
+              onClick={onClearChat}
+              title="Clear chat history (or type /clear in chat)"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#ffffff';
+                e.currentTarget.style.borderColor = '#ef4444';
+                e.currentTarget.style.background = '#ef4444';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#f87171';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Clear Chat</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Messages Stream Area */}
@@ -195,7 +242,7 @@ export default function ChatPanel({
           <input
             type="text"
             className="chat-input"
-            placeholder={`Ask anything about ${activeRepo?.name || 'this codebase'}...`}
+            placeholder={`Ask anything about ${activeRepo?.name || 'this codebase'}... (or type /clear to reset)`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isStreaming}

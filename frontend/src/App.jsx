@@ -226,6 +226,18 @@ export default function App() {
     }
   };
 
+  const handleClearChat = async () => {
+    if (!activeRepo || isStreaming) return;
+    setMessages([]);
+    setStreamingMessage('');
+    setCurrentCitations([]);
+    try {
+      await fetch(`/api/repos/${activeRepo.id}/messages`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Failed to clear chat on backend:', e);
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Top Header */}
@@ -258,6 +270,7 @@ export default function App() {
           isStreaming={isStreaming}
           onSendMessage={handleSendMessage}
           onJumpToCitation={handleJumpToCitation}
+          onClearChat={handleClearChat}
         />
 
         {/* Right Panel: Code Inspector */}

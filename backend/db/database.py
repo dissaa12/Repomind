@@ -5,7 +5,7 @@ backend/db/database.py - SQLite Persistence for Repositories, Files, and Chat Se
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from config import get_settings
@@ -81,7 +81,7 @@ def upsert_repository(
 ) -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         cursor.execute("""
             INSERT INTO repositories (id, name, source_type, source_path, indexed_at, file_count, chunk_count, languages)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -167,7 +167,7 @@ def get_or_create_default_conversation(repo_id: str) -> Dict[str, Any]:
         if row:
             return dict(row)
         conv_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         cursor.execute("""
             INSERT INTO conversations (id, repo_id, title, created_at)
             VALUES (?, ?, ?, ?)
@@ -184,7 +184,7 @@ def add_message(
     model_used: str = ""
 ) -> Dict[str, Any]:
     msg_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     cit_json = json.dumps(citations or [])
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -215,3 +215,12 @@ def get_messages(conversation_id: str) -> List[Dict[str, Any]]:
             d["citations"] = json.loads(d.get("citations") or "[]")
             messages.append(d)
         return messages
+
+
+def clear_messages(conversation_id: str) -> None:
+    """Deletes all messages for a given conversation."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        conn.commit()
+

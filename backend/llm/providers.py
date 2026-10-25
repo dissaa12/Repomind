@@ -109,6 +109,7 @@ async def stream_openai_compatible(
     model_name: str
 ) -> AsyncGenerator[str, None]:
     from openai import AsyncOpenAI
+    from collections.abc import AsyncIterable
     client = AsyncOpenAI(api_key=api_key or "not-needed", base_url=base_url)
     stream = await client.chat.completions.create(
         model=model_name,
@@ -118,10 +119,11 @@ async def stream_openai_compatible(
         ],
         stream=True
     )
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            yield delta
+    if isinstance(stream, AsyncIterable):
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                yield delta
 
 
 async def stream_chat_response(

@@ -4,15 +4,15 @@ Provides high-speed local dense embedding storage and cosine similarity search.
 """
 
 import hashlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 import chromadb
-from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+from chromadb.api.types import Documents, Embeddable, EmbeddingFunction, Embeddings, Metadatas
 from chromadb.config import Settings as ChromaSettings
 import numpy as np
 from config import get_settings
 
 
-class FastLocalDenseEmbedding(EmbeddingFunction[Documents]):
+class FastLocalDenseEmbedding(EmbeddingFunction[Embeddable]):
     """
     Ultra-fast, deterministic local embedding function producing 384-dimensional dense vectors
     without requiring external model downloads.
@@ -23,11 +23,11 @@ class FastLocalDenseEmbedding(EmbeddingFunction[Documents]):
     def name(self) -> str:
         return "fast_local_embedding"
 
-    def __call__(self, input: Documents) -> Embeddings:
-        results: Embeddings = []
+    def __call__(self, input: Embeddable) -> Embeddings:
+        results: List[List[float]] = []
         for text in input:
             vec = np.zeros(self.dimension, dtype=np.float32)
-            words = text.lower().replace("\n", " ").split()
+            words = str(text).lower().replace("\n", " ").split()
             for w in words:
                 if not w:
                     continue
@@ -48,7 +48,7 @@ class FastLocalDenseEmbedding(EmbeddingFunction[Documents]):
             if norm > 0.0:
                 vec = vec / norm
             results.append(vec.tolist())
-        return results
+        return cast(Embeddings, results)
 
 
 class ChromaVectorStore:
@@ -108,7 +108,7 @@ class ChromaVectorStore:
             collection.upsert(
                 ids=ids,
                 documents=documents,
-                metadatas=metadatas
+                metadatas=cast(Metadatas, metadatas)
             )
 
     def query(self, repo_id: str, query_text: str, top_k: int = 10) -> List[Dict[str, Any]]:

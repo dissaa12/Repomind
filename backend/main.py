@@ -21,6 +21,7 @@ from db.database import (
     get_or_create_default_conversation,
     add_message,
     get_messages,
+    clear_messages,
 )
 from pipeline import (
     index_local_repo,
@@ -231,6 +232,13 @@ def get_repo_messages(repo_id: str):
     conv = get_or_create_default_conversation(repo_id)
     messages = get_messages(conv["id"])
     return {"conversation_id": conv["id"], "messages": messages}
+
+
+@app.delete("/api/repos/{repo_id}/messages")
+def clear_repo_messages(repo_id: str):
+    conv = get_or_create_default_conversation(repo_id)
+    clear_messages(conv["id"])
+    return {"status": "cleared", "conversation_id": conv["id"]}
 
 
 @app.post("/api/repos/{repo_id}/chat/stream")
